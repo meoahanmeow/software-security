@@ -125,9 +125,11 @@ def login():
     username = request.form.get("username") or (request.json or {}).get("username")
     password = request.form.get("password") or (request.json or {}).get("password")
     con = db()
-    q = "SELECT * FROM users WHERE username = '%s' AND password = '%s'" % (
-        username, hashlib.md5((password or "").encode()).hexdigest())
-    row = con.execute(q).fetchone()
+    # Parameterised: username/password are bound as data, never parsed as SQL syntax (CWE-89).
+    row = con.execute(
+        "SELECT * FROM users WHERE username = ? AND password = ?",
+        (username, hashlib.md5((password or "").encode()).hexdigest()),
+    ).fetchone()
     con.close()
     if not row:
         return "login failed", 401
@@ -175,8 +177,11 @@ def search():
         return "auth required", 401
     term = request.args.get("q", "")
     con = db()
-    q = "SELECT id,title,body FROM notes WHERE owner='%s' AND body LIKE '%%%s%%'" % (user, term)
-    rows = con.execute(q).fetchall()
+    # Parameterised: `term` is bound as a LIKE pattern, never concatenated into the statement.
+    rows = con.execute(
+        "SELECT id,title,body FROM notes WHERE owner = ? AND body LIKE ?",
+        (user, "%" + term + "%"),
+    ).fetchall()
     con.close()
     return render_template_string("<a href=/>back</a><ul>" +
         "".join("<li>%s: %s</li>" % (r["title"], r["body"]) for r in rows) + "</ul>")
